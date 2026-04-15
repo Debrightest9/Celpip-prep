@@ -45,7 +45,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       select: { id: true, email: true, userId: true, name: true, targetScore: true, testDate: true, xp: true, streak: true },
     });
 
-    const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as string });
+    const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as unknown as number });
     res.status(201).json({ user, token });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -84,7 +84,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       data: { lastActive: new Date() },
     });
 
-    const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as string });
+    const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as unknown as number });
     const { password: _, ...safeUser } = user;
     res.json({ user: safeUser, token });
   } catch (err) {
