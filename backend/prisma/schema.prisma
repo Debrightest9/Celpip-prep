@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  userId      String    @unique
+  name        String
+  password    String?
+  targetScore Int       @default(9)
+  testDate    DateTime?
+  xp          Int       @default(0)
+  streak      Int       @default(0)
+  lastActive  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions   Session[]
+  progress   Progress[]
+  studyPlans StudyPlan[]
+
+  @@map("users")
+}
+
+model Session {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String    // QUICK_PRACTICE | FULL_TEST | WEAK_AREA
+  skill           String?   // LISTENING | READING | WRITING | SPEAKING
+  status          String    @default("IN_PROGRESS")
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  totalScore      Float?
+  clbEstimate     Int?
+  overallFeedback String?   // JSON stored as text
+
+  responses Response[]
+
+  @@map("sessions")
+}
+
+model Response {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  skill       String   // LISTENING | READING | WRITING | SPEAKING
+  subType     String
+  question    String   // JSON stored as text
+  userAnswer  String
+  score       Float?
+  clbScore    Int?
+  feedback    String?  // JSON stored as text
+  band9Sample String?
+  timeTaken   Int?
+  createdAt   DateTime @default(now())
+
+  @@map("responses")
+}
+
+model Progress {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill    String   // LISTENING | READING | WRITING | SPEAKING
+  clbScore Int
+  score    Float?
+  date     DateTime @default(now())
+
+  @@map("progress")
+}
+
+model StudyPlan {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan   String   // JSON stored as text
+  date   DateTime @default(now())
+
+  @@map("study_plans")
+}
