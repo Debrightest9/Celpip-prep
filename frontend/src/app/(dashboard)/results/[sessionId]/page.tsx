@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { sessionsApi } from '@/lib/api';
-import { Session, Skill, CoachFeedback, WritingFeedback, SpeakingFeedback, ReadingListeningFeedback } from '@/types';
+import { Session, Skill, Question, CoachFeedback, WritingFeedback, SpeakingFeedback, ReadingListeningFeedback } from '@/types';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import { ArrowLeft, Download, Brain, AlertTriangle, Lightbulb, BookOpen, Target, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -208,7 +208,7 @@ export default function ResultsPage() {
             {session.responses[activeTab] && (
               <FeedbackPanel
                 skill={session.responses[activeTab].skill}
-                question={session.responses[activeTab].question}
+                question={session.responses[activeTab].question as Question}
                 feedback={session.responses[activeTab].feedback as WritingFeedback | SpeakingFeedback | ReadingListeningFeedback}
                 userAnswer={session.responses[activeTab].userAnswer}
                 band9={null}
