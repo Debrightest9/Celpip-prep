@@ -898,9 +898,12 @@ Return EXACTLY this JSON (no other text):
     messages: [{ role: 'system', content: CELPIP_SYSTEM }, { role: 'user', content: prompt }],
     temperature: 0.7,
     response_format: { type: 'json_object' },
+    max_tokens: 2000,
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as GeneratedSection;
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error('OpenAI returned empty response for reading section');
+  return JSON.parse(content) as GeneratedSection;
 }
 
 // ─── Listening Section ────────────────────────────────────────────────────────
@@ -950,9 +953,12 @@ Return EXACTLY this JSON (no other text):
     messages: [{ role: 'system', content: CELPIP_SYSTEM }, { role: 'user', content: prompt }],
     temperature: 0.7,
     response_format: { type: 'json_object' },
+    max_tokens: 2000,
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as GeneratedSection;
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error('OpenAI returned empty response for listening section');
+  return JSON.parse(content) as GeneratedSection;
 }
 
 // ─── Section Evaluator (all questions at once) ────────────────────────────────

@@ -130,6 +130,8 @@ function FullTestSectionView({
   );
 }
 
+type PrefetchEntry = { data?: Question | QuestionSet; error?: string; pending: Promise<void> };
+
 // ── Main Full Test Page ────────────────────────────────────────────────────────
 export default function FullTestPage() {
   const router = useRouter();
@@ -153,7 +155,11 @@ export default function FullTestPage() {
   // Results
   const [results, setResults] = useState<StepResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const startTimeRef = useRef<number>(0);
+
+  // Prefetch cache: idx → { data, error, pending }
+  const prefetchCache = useRef<Map<number, PrefetchEntry>>(new Map());
 
   const step: FullTestStep = FULL_TEST_STEPS[currentIdx];
   const isSection = step?.type === 'section';
@@ -166,11 +172,39 @@ export default function FullTestPage() {
     return () => clearTimeout(t);
   });
 
+  const prefetchStep = (idx: number) => {
+    if (idx >= FULL_TEST_STEPS.length) return;
+    if (prefetchCache.current.has(idx)) return;
+
+    const entry: PrefetchEntry = { pending: Promise.resolve() };
+    entry.pending = (async () => {
+      const s = FULL_TEST_STEPS[idx];
+      try {
+        if (s.type === 'section') {
+          const res = await questionsApi.generateSection({ skill: s.skill as 'READING' | 'LISTENING', part: s.partNumber });
+          const sec: QuestionSet = res.data.section;
+          if (sec?.questions?.length) entry.data = sec;
+          else entry.error = 'Invalid section data';
+        } else {
+          const res = await questionsApi.generate({ skill: s.skill, subType: s.subType });
+          const q: Question = res.data.question;
+          if (q?.prompt) entry.data = q;
+          else entry.error = 'Invalid question data';
+        }
+      } catch (err: unknown) {
+        entry.error = (err as { message?: string }).message || 'Failed to prefetch';
+      }
+    })();
+    prefetchCache.current.set(idx, entry);
+  };
+
   const startTest = async () => {
     setLoading(true);
     try {
       const res = await sessionsApi.create({ type: 'FULL_TEST' });
       setSessionId(res.data.session.id);
+      // Prefetch step 1 in parallel while step 0 is loading
+      prefetchStep(1);
       await loadStep(0);
     } catch {
       toast.error('Failed to start test');
@@ -180,28 +214,63 @@ export default function FullTestPage() {
 
   const loadStep = async (idx: number) => {
     setLoading(true);
+    setLoadError(null);
     setStage('loading');
     setQuestion(null); setSection(null);
     setUserAnswer(''); setSectionAnswers({}); setAudioBlob(null);
 
+    // Kick off prefetch for the step after this one immediately
+    prefetchStep(idx + 1);
+
     const s = FULL_TEST_STEPS[idx];
     try {
-      if (s.type === 'section') {
-        const res = await questionsApi.generateSection({ skill: s.skill as 'READING' | 'LISTENING', part: s.partNumber });
-        const sec: QuestionSet = res.data.section;
-        setSection(sec);
-        setTimeLeft(sec.timeLimit);
-      } else {
-        const res = await questionsApi.generate({ skill: s.skill, subType: s.subType });
-        const q: Question = res.data.question;
-        setQuestion(q);
-        setTimeLeft(q.timeLimit);
+      let data: Question | QuestionSet | undefined;
+
+      const cached = prefetchCache.current.get(idx);
+      if (cached) {
+        // Wait for the in-flight prefetch (may already be done)
+        await cached.pending;
+        if (cached.data) {
+          data = cached.data;
+        } else if (cached.error) {
+          throw new Error(cached.error);
+        }
+        prefetchCache.current.delete(idx);
       }
+
+      if (!data) {
+        // No prefetch — generate now
+        if (s.type === 'section') {
+          const res = await questionsApi.generateSection({ skill: s.skill as 'READING' | 'LISTENING', part: s.partNumber });
+          data = res.data.section as QuestionSet;
+        } else {
+          const res = await questionsApi.generate({ skill: s.skill, subType: s.subType });
+          data = res.data.question as Question;
+        }
+      }
+
+      if (s.type === 'section') {
+        const sec = data as QuestionSet;
+        if (!sec?.questions?.length) throw new Error('Invalid section data received');
+        setSection(sec);
+        setTimeLeft(sec.timeLimit ?? 480);
+      } else {
+        const q = data as Question;
+        if (!q?.prompt) throw new Error('Invalid question data received');
+        setQuestion(q);
+        setTimeLeft(q.timeLimit ?? 120);
+      }
+
       startTimeRef.current = Date.now();
       setStage('question');
-    } catch {
-      toast.error('Failed to load step — skipping');
-      await advanceOrFinish(idx);
+    } catch (err: unknown) {
+      const msg = (err as { code?: string }).code === 'ECONNABORTED'
+        ? 'Request timed out — the server took too long to respond.'
+        : ((err as { response?: { data?: { error?: string } } }).response?.data?.error) ||
+          (err as { message?: string }).message ||
+          'Failed to load step.';
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -281,6 +350,8 @@ export default function FullTestPage() {
       if (sessionId) await sessionsApi.complete(sessionId).catch(() => {});
       setStage('results');
     } else {
+      // Start prefetching next step immediately while user reads the break screen
+      prefetchStep(nextIdx);
       setCurrentIdx(nextIdx);
       setStage('break');
     }
@@ -343,15 +414,33 @@ export default function FullTestPage() {
   );
 
   // ── Loading step ───────────────────────────────────────────────────────────
-  if (stage === 'loading' || (stage === 'question' && isSection ? !section : !question)) return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4">
-      <div className="animate-spin w-10 h-10 border-2 border-brand-600 border-t-transparent rounded-full" />
-      <p className="text-gray-600 font-medium">
-        {step ? `${step.skill === 'LISTENING' || step.skill === 'READING' ? 'Generating section' : 'Generating task'}: ${step.partName}` : 'Loading...'}
-      </p>
-      <p className="text-sm text-gray-400">Step {currentIdx + 1} of {totalSteps}</p>
-    </div>
-  );
+  if (stage === 'loading' || (stage === 'question' && (isSection ? !section : !question))) {
+    if (loadError) return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4 p-6">
+        <AlertCircle className="w-10 h-10 text-red-500" />
+        <p className="text-gray-700 font-medium text-center max-w-sm">{loadError}</p>
+        <p className="text-sm text-gray-400">Step {currentIdx + 1} of {totalSteps}: {step?.partName}</p>
+        <div className="flex gap-3">
+          <button onClick={() => loadStep(currentIdx)} className="btn-primary btn-sm flex items-center gap-2">
+            <RefreshCw className="w-4 h-4" /> Retry
+          </button>
+          <button onClick={() => advanceOrFinish(currentIdx)} className="btn-secondary btn-sm">
+            Skip this step
+          </button>
+        </div>
+      </div>
+    );
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="animate-spin w-10 h-10 border-2 border-brand-600 border-t-transparent rounded-full" />
+        <p className="text-gray-600 font-medium">
+          {step ? `${step.skill === 'LISTENING' || step.skill === 'READING' ? 'Generating section' : 'Generating task'}: ${step.partName}` : 'Loading...'}
+        </p>
+        <p className="text-sm text-gray-400">Step {currentIdx + 1} of {totalSteps}</p>
+        <p className="text-xs text-gray-300">This may take up to 30 seconds…</p>
+      </div>
+    );
+  }
 
   // ── Break between sections ─────────────────────────────────────────────────
   if (stage === 'break') {
