@@ -3,7 +3,11 @@ import { env } from '../config/env';
 
 let _openai: OpenAI | null = null;
 function getClient(): OpenAI {
-  if (!_openai) _openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  if (!_openai) _openai = new OpenAI({
+    apiKey: env.OPENAI_API_KEY,
+    timeout: 60_000,
+    maxRetries: 0,
+  });
   return _openai;
 }
 
@@ -894,7 +898,7 @@ Return EXACTLY this JSON (no other text):
 }`;
 
   const response = await getClient().chat.completions.create({
-    model: env.OPENAI_MODEL,
+    model: 'gpt-4o-mini',
     messages: [{ role: 'system', content: CELPIP_SYSTEM }, { role: 'user', content: prompt }],
     temperature: 0.7,
     response_format: { type: 'json_object' },
@@ -949,7 +953,7 @@ Return EXACTLY this JSON (no other text):
 }`;
 
   const response = await getClient().chat.completions.create({
-    model: env.OPENAI_MODEL,
+    model: 'gpt-4o-mini',
     messages: [{ role: 'system', content: CELPIP_SYSTEM }, { role: 'user', content: prompt }],
     temperature: 0.7,
     response_format: { type: 'json_object' },
