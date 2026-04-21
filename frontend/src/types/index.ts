@@ -49,6 +49,7 @@ export interface Question {
   options?: string[];
   correctAnswer?: string;
   timeLimit: number;
+  prepTime?: number;
   scenario?: string;
   taskContext?: string;
   photoUrl?: string;

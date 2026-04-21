@@ -154,37 +154,46 @@ router.post('/:sessionId/respond-section', async (req: AuthRequest, res: Respons
 
 // ── Submit audio (speaking) ───────────────────────────────────────────────────
 router.post('/:sessionId/respond-audio', upload.single('audio'), async (req: AuthRequest, res: Response): Promise<void> => {
-  if (!req.file) { res.status(400).json({ error: 'Audio file required' }); return; }
-  const { subType, question, timeTaken } = req.body as { subType?: string; question?: string; timeTaken?: string };
-  if (!question) { res.status(400).json({ error: 'Question data required' }); return; }
-  const sessionId = req.params['sessionId'] as string;
+  try {
+    if (!req.file) { res.status(400).json({ error: 'Audio file required' }); return; }
+    const { subType, question, timeTaken } = req.body as { subType?: string; question?: string; timeTaken?: string };
+    if (!question) { res.status(400).json({ error: 'Question data required' }); return; }
+    const sessionId = req.params['sessionId'] as string;
 
-  const session = await prisma.session.findFirst({
-    where: { id: sessionId, userId: req.userId! },
-  });
-  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+    const session = await prisma.session.findFirst({
+      where: { id: sessionId, userId: req.userId! },
+    });
+    if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
 
-  const questionData: GeneratedQuestion = typeof question === 'string' ? JSON.parse(question) : question;
-  const transcript = await transcribeAudio(req.file.buffer, req.file.mimetype);
-  const feedback = await evaluateSpeaking(questionData, transcript);
-  const clbScore = feedback.clbScore;
-  const score = feedback.overallScore;
+    const questionData: GeneratedQuestion = typeof question === 'string' ? JSON.parse(question) : question;
+    const transcript = await transcribeAudio(req.file.buffer, req.file.mimetype);
+    if (!transcript || transcript.trim().length === 0) {
+      res.status(422).json({ error: 'Could not transcribe audio — please re-record and try again.' }); return;
+    }
 
-  const response = await prisma.response.create({
-    data: {
-      sessionId: session.id, skill: 'SPEAKING',
-      subType: subType || 'speaking', question: j(questionData),
-      userAnswer: transcript, feedback: j(feedback),
-      clbScore, score,
-      timeTaken: timeTaken ? parseInt(timeTaken) : null,
-    },
-  });
+    const feedback = await evaluateSpeaking(questionData, transcript);
+    const clbScore = feedback.clbScore;
+    const score = feedback.overallScore;
 
-  await prisma.progress.create({
-    data: { userId: req.userId!, skill: 'SPEAKING', clbScore, score },
-  });
+    const response = await prisma.response.create({
+      data: {
+        sessionId: session.id, skill: 'SPEAKING',
+        subType: subType || 'speaking', question: j(questionData),
+        userAnswer: transcript, feedback: j(feedback),
+        clbScore, score,
+        timeTaken: timeTaken ? parseInt(timeTaken) : null,
+      },
+    });
 
-  res.json({ transcript, response: { ...response, question: questionData, feedback }, feedback });
+    await prisma.progress.create({
+      data: { userId: req.userId!, skill: 'SPEAKING', clbScore, score },
+    });
+
+    res.json({ transcript, response: { ...response, question: questionData, feedback }, feedback });
+  } catch (err: unknown) {
+    const msg = (err as { message?: string }).message || 'Speaking evaluation failed';
+    res.status(500).json({ error: msg });
+  }
 });
 
 // ── Complete session + coach feedback ─────────────────────────────────────────

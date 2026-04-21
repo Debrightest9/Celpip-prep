@@ -81,6 +81,8 @@ export interface CelpipTask {
   name: string;
   description: string;
   timeMinutes: number;
+  prepSeconds?: number;
+  responseSeconds?: number;
 }
 
 export const WRITING_TASKS: CelpipTask[] = [
@@ -99,14 +101,14 @@ export const WRITING_TASKS: CelpipTask[] = [
 ];
 
 export const SPEAKING_TASKS: CelpipTask[] = [
-  { number: 1, subType: 'giving_advice',           name: 'Task 1 — Giving Advice',                   description: 'Give advice to a friend who is facing a difficult personal or work situation.',           timeMinutes: 2 },
-  { number: 2, subType: 'personal_experience',     name: 'Task 2 — Talking About Personal Experience', description: 'Describe a memorable experience from your own life and what you learned from it.',      timeMinutes: 2 },
-  { number: 3, subType: 'describing_scene',        name: 'Task 3 — Describing a Scene',              description: 'Describe what is happening in a scene or picture in as much detail as possible.',          timeMinutes: 2 },
-  { number: 4, subType: 'making_prediction',       name: 'Task 4 — Making Predictions',              description: 'Talk about what you think will happen in the future regarding a given topic.',             timeMinutes: 2 },
-  { number: 5, subType: 'comparing_options',       name: 'Task 5 — Comparing & Persuading',          description: 'Compare two options and persuade a friend or colleague to choose one of them.',            timeMinutes: 2 },
-  { number: 6, subType: 'dealing_with_difficulty', name: 'Task 6 — Dealing with a Difficult Situation', description: 'Explain a challenging situation you are in and describe how you would handle it.',     timeMinutes: 2 },
-  { number: 7, subType: 'expressing_opinion',      name: 'Task 7 — Expressing Opinions',             description: 'Share and clearly defend your personal opinion on a social or community issue.',           timeMinutes: 2 },
-  { number: 8, subType: 'unusual_situation',       name: 'Task 8 — Describing an Unusual Situation', description: 'Describe an unexpected situation that has happened and explain what you would do.',        timeMinutes: 2 },
+  { number: 1, subType: 'giving_advice',           name: 'Task 1 — Giving Advice',                    description: 'Give advice to a friend who is facing a difficult personal or work situation.',            timeMinutes: 2, prepSeconds: 30, responseSeconds: 90 },
+  { number: 2, subType: 'personal_experience',     name: 'Task 2 — Personal Experience',              description: 'Describe a memorable experience from your own life and what you learned from it.',        timeMinutes: 2, prepSeconds: 30, responseSeconds: 60 },
+  { number: 3, subType: 'describing_scene',        name: 'Task 3 — Describing a Scene',               description: 'Describe what is happening in a scene or picture in as much detail as possible.',          timeMinutes: 2, prepSeconds: 30, responseSeconds: 60 },
+  { number: 4, subType: 'making_prediction',       name: 'Task 4 — Making Predictions',               description: 'Talk about what you think will happen in the future regarding a given topic.',             timeMinutes: 2, prepSeconds: 30, responseSeconds: 60 },
+  { number: 5, subType: 'comparing_options',       name: 'Task 5 — Comparing & Persuading',           description: 'Compare two options and persuade a friend or colleague to choose one of them.',            timeMinutes: 2, prepSeconds: 40, responseSeconds: 60 },
+  { number: 6, subType: 'dealing_with_difficulty', name: 'Task 6 — Dealing with a Difficult Situation', description: 'Explain a challenging situation you are in and describe how you would handle it.',      timeMinutes: 2, prepSeconds: 60, responseSeconds: 60 },
+  { number: 7, subType: 'expressing_opinion',      name: 'Task 7 — Expressing Opinions',              description: 'Share and clearly defend your personal opinion on a social or community issue.',           timeMinutes: 2, prepSeconds: 30, responseSeconds: 90 },
+  { number: 8, subType: 'unusual_situation',       name: 'Task 8 — Describing an Unusual Situation',  description: 'Describe an unexpected situation that has happened and explain what you would do.',        timeMinutes: 2, prepSeconds: 30, responseSeconds: 60 },
 ];
 
 // Full test structure — 20 steps in real CELPIP order

@@ -24,6 +24,7 @@ export interface GeneratedQuestion {
   options?: string[];
   correctAnswer?: string;
   timeLimit: number;
+  prepTime?: number;
   scenario?: string;
   taskContext?: string;
   photoUrl?: string;
@@ -460,18 +461,29 @@ const SPEAKING_TASK_DEFS: Record<string, {
   },
 };
 
+// Official CELPIP speaking timings (prep + response seconds)
+const SPEAKING_TIMINGS: Record<string, { prepTime: number; responseTime: number }> = {
+  giving_advice:           { prepTime: 30, responseTime: 90 },
+  personal_experience:     { prepTime: 30, responseTime: 60 },
+  describing_scene:        { prepTime: 30, responseTime: 60 },
+  making_prediction:       { prepTime: 30, responseTime: 60 },
+  comparing_options:       { prepTime: 40, responseTime: 60 },
+  dealing_with_difficulty: { prepTime: 60, responseTime: 60 },
+  expressing_opinion:      { prepTime: 30, responseTime: 90 },
+  unusual_situation:       { prepTime: 30, responseTime: 60 },
+};
+
 export async function generateSpeakingTask(difficulty: number, subType?: string): Promise<GeneratedQuestion> {
   const clb = Math.min(12, Math.round(difficulty * 1.1) + 1);
 
-  // Use requested subType, or fall back to a random one if not specified
   const resolvedSubType = (subType && SPEAKING_TASK_DEFS[subType])
     ? subType
     : Object.keys(SPEAKING_TASK_DEFS)[Math.floor(Math.random() * 8)];
 
   const taskDef = SPEAKING_TASK_DEFS[resolvedSubType];
+  const timing = SPEAKING_TIMINGS[resolvedSubType] ?? { prepTime: 30, responseTime: 60 };
   const rawScenario = taskDef.scenarioBank[Math.floor(Math.random() * taskDef.scenarioBank.length)];
 
-  // For describing_scene, scenario is an object with photoUrl; all others are plain strings
   const isPhotoTask = typeof rawScenario === 'object';
   const scenarioText = isPhotoTask ? (rawScenario as { description: string }).description : rawScenario as string;
   const photoUrl = isPhotoTask ? (rawScenario as { photoUrl: string }).photoUrl : undefined;
@@ -486,7 +498,7 @@ Requirements:
 - Adapt the scenario with specific, realistic Canadian names, places, and details
 - Give exactly 3 bullet points the speaker MUST address in their response
 - Each bullet should require a different kind of response (e.g., describe, explain, give reason, compare, recommend, give example)
-- The full task should be answerable in 60–90 seconds of natural speech
+- The full task should be answerable in ${timing.responseTime} seconds of natural speech
 - The situation/context must be clearly stated so the speaker knows exactly what to talk about
 
 Return EXACTLY this JSON (no markdown, no extra fields):
@@ -495,9 +507,10 @@ Return EXACTLY this JSON (no markdown, no extra fields):
   "subType": "${resolvedSubType}",
   "difficulty": ${difficulty},
   "scenario": "${taskDef.label}",
-  "instructions": "You have 30 seconds to prepare and 90 seconds to speak. Address ALL three points below.",
+  "instructions": "You have ${timing.prepTime} seconds to prepare and ${timing.responseTime} seconds to speak. Address ALL three points below.",
   "prompt": "<2–3 sentences setting up the specific situation clearly>\\n\\nIn your response:\\n• <bullet point 1 — specific action/description required>\\n• <bullet point 2 — specific explanation or comparison required>\\n• <bullet point 3 — recommendation, opinion, or reflection required>",
-  "timeLimit": 90
+  "prepTime": ${timing.prepTime},
+  "timeLimit": ${timing.responseTime}
 }`;
 
   const response = await getClient().chat.completions.create({
@@ -507,7 +520,12 @@ Return EXACTLY this JSON (no markdown, no extra fields):
     response_format: { type: 'json_object' },
   });
 
-  const result = JSON.parse(response.choices[0].message.content || '{}') as GeneratedQuestion;
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error('OpenAI returned empty response for speaking task');
+  const result = JSON.parse(content) as GeneratedQuestion;
+  // Ensure correct timings are always set regardless of what the model returns
+  result.prepTime = timing.prepTime;
+  result.timeLimit = timing.responseTime;
   if (photoUrl) result.photoUrl = photoUrl;
   return result;
 }
@@ -622,7 +640,9 @@ Return EXACTLY this JSON:
     response_format: { type: 'json_object' },
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as SpeakingFeedback;
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error('OpenAI returned empty response for speaking evaluation');
+  return JSON.parse(content) as SpeakingFeedback;
 }
 
 // ─── Reading/Listening Evaluation ────────────────────────────────────────────

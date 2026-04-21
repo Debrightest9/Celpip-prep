@@ -149,6 +149,8 @@ export default function FullTestPage() {
   // Speaking
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [speakingPhase, setSpeakingPhase] = useState<'prep' | 'recording' | 'done'>('prep');
+  const [prepTimeLeft, setPrepTimeLeft] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -164,9 +166,29 @@ export default function FullTestPage() {
   const step: FullTestStep = FULL_TEST_STEPS[currentIdx];
   const isSection = step?.type === 'section';
 
-  // Timer countdown
+  // Prep countdown for speaking
   useEffect(() => {
-    if (stage !== 'question' || timeLeft <= 0 || step?.skill === 'WRITING') return;
+    if (stage !== 'question' || step?.skill !== 'SPEAKING' || speakingPhase !== 'prep') return;
+    if (prepTimeLeft <= 0) { setSpeakingPhase('recording'); return; }
+    const t = setTimeout(() => setPrepTimeLeft(p => p - 1), 1000);
+    return () => clearTimeout(t);
+  });
+
+  // Response timer for speaking (auto-stops recording at 0)
+  useEffect(() => {
+    if (stage !== 'question' || step?.skill !== 'SPEAKING' || speakingPhase !== 'recording') return;
+    if (timeLeft <= 0) {
+      if (isRecording) { mediaRecorderRef.current?.stop(); setIsRecording(false); }
+      setSpeakingPhase('done');
+      return;
+    }
+    const t = setTimeout(() => setTimeLeft(p => p - 1), 1000);
+    return () => clearTimeout(t);
+  });
+
+  // Timer countdown for non-speaking, non-writing tasks
+  useEffect(() => {
+    if (stage !== 'question' || timeLeft <= 0 || step?.skill === 'WRITING' || step?.skill === 'SPEAKING') return;
     if (timeLeft === 1) { handleSubmit(); return; }
     const t = setTimeout(() => setTimeLeft(p => p - 1), 1000);
     return () => clearTimeout(t);
@@ -218,6 +240,7 @@ export default function FullTestPage() {
     setStage('loading');
     setQuestion(null); setSection(null);
     setUserAnswer(''); setSectionAnswers({}); setAudioBlob(null);
+    setSpeakingPhase('prep'); setPrepTimeLeft(0);
 
     // Kick off prefetch for the step after this one immediately
     prefetchStep(idx + 1);
@@ -259,6 +282,10 @@ export default function FullTestPage() {
         if (!q?.prompt) throw new Error('Invalid question data received');
         setQuestion(q);
         setTimeLeft(q.timeLimit ?? 120);
+        if (s.skill === 'SPEAKING') {
+          setSpeakingPhase('prep');
+          setPrepTimeLeft(q.prepTime ?? 30);
+        }
       }
 
       startTimeRef.current = Date.now();
@@ -682,43 +709,76 @@ export default function FullTestPage() {
       {/* Speaking */}
       {step.skill === 'SPEAKING' && question && (
         <div className="space-y-4">
-          <div className="card p-4 bg-blue-50 border-blue-200">
-            <p className="text-sm text-blue-800">{question.instructions}</p>
-          </div>
+          {question.photoUrl && (
+            <div className="card overflow-hidden">
+              <img src={question.photoUrl} alt="Scene to describe" className="w-full max-h-64 object-cover" />
+            </div>
+          )}
           <div className="card p-5">
             <p className="text-gray-900 font-medium leading-relaxed whitespace-pre-wrap">{question.prompt}</p>
           </div>
-          <div className="card p-4">
-            {!audioBlob ? (
-              !isRecording ? (
-                <button onClick={startRecording}
-                  className="flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600">
+
+          {/* Prep phase */}
+          {speakingPhase === 'prep' && (
+            <div className="card p-5 border-2 border-yellow-300 bg-yellow-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-yellow-800">Preparation Time — read the task carefully</p>
+                <div className={clsx('font-mono text-xl font-bold px-3 py-1 rounded-full',
+                  prepTimeLeft <= 10 ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700')}>
+                  {fmt(prepTimeLeft)}
+                </div>
+              </div>
+              <p className="text-xs text-yellow-700">Recording will start automatically when the timer ends, or click below to start early.</p>
+              <button onClick={() => setSpeakingPhase('recording')}
+                className="mt-3 flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600">
+                <Mic className="w-4 h-4" /> Start Recording Early
+              </button>
+            </div>
+          )}
+
+          {/* Recording phase */}
+          {speakingPhase === 'recording' && (
+            <div className="card p-5 border-2 border-red-300 bg-red-50">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-red-700 font-semibold">
+                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                  {isRecording ? 'Recording…' : 'Recording phase — press Start'}
+                </div>
+                <div className={clsx('font-mono text-xl font-bold px-3 py-1 rounded-full',
+                  timeLeft <= 15 ? 'bg-red-200 text-red-700' : 'bg-red-100 text-red-600')}>
+                  {fmt(timeLeft)}
+                </div>
+              </div>
+              {!isRecording ? (
+                <button onClick={() => { startRecording(); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600">
                   <Mic className="w-5 h-5" /> Start Recording
                 </button>
               ) : (
-                <div className="flex items-center gap-4">
-                  <button onClick={stopRecording}
-                    className="flex items-center gap-2 px-5 py-3 bg-gray-800 text-white rounded-xl font-medium hover:bg-gray-900">
-                    <Square className="w-5 h-5" /> Stop Recording
-                  </button>
-                  <div className="flex items-center gap-1.5 text-red-600 font-semibold text-sm">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" /> Recording...
-                  </div>
-                </div>
-              )
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
-                  <CheckCircle className="w-4 h-4" /> Recording ready
-                </div>
-                <audio controls src={URL.createObjectURL(audioBlob)} className="w-full h-8" />
-                <button onClick={() => setAudioBlob(null)} className="btn-secondary btn-sm">
-                  <RefreshCw className="w-3.5 h-3.5" /> Re-record
+                <button onClick={() => { stopRecording(); setSpeakingPhase('done'); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gray-800 text-white rounded-xl font-medium hover:bg-gray-900">
+                  <Square className="w-5 h-5" /> Stop Early
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Done phase */}
+          {speakingPhase === 'done' && audioBlob && (
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
+                <CheckCircle className="w-4 h-4" /> Recording ready
               </div>
-            )}
-          </div>
-          <button onClick={handleSubmit} disabled={!audioBlob} className="btn-primary btn-lg w-full">
+              <audio controls src={URL.createObjectURL(audioBlob)} className="w-full h-8" />
+              <button onClick={() => { setAudioBlob(null); setSpeakingPhase('recording'); setTimeLeft(question.timeLimit); }}
+                className="btn-secondary btn-sm">
+                <RefreshCw className="w-3.5 h-3.5" /> Re-record
+              </button>
+            </div>
+          )}
+
+          <button onClick={handleSubmit} disabled={!audioBlob || speakingPhase !== 'done'}
+            className={clsx('btn-primary btn-lg w-full', (!audioBlob || speakingPhase !== 'done') && 'opacity-50 cursor-not-allowed')}>
             Submit & Continue <ChevronRight className="w-5 h-5" />
           </button>
         </div>
