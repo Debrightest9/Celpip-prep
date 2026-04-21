@@ -590,7 +590,9 @@ Be a STRICT but fair examiner. Do not inflate scores. If they missed a bullet po
     response_format: { type: 'json_object' },
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as WritingFeedback;
+  const wContent = response.choices[0].message.content;
+  if (!wContent) throw new Error('OpenAI returned empty response for writing evaluation');
+  return JSON.parse(wContent) as WritingFeedback;
 }
 
 // ─── Speaking Evaluation ──────────────────────────────────────────────────────
@@ -690,7 +692,9 @@ Return EXACTLY this JSON:
     response_format: { type: 'json_object' },
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as ReadingListeningFeedback;
+  const rlContent = response.choices[0].message.content;
+  if (!rlContent) throw new Error('OpenAI returned empty response for reading/listening evaluation');
+  return JSON.parse(rlContent) as ReadingListeningFeedback;
 }
 
 // ─── Coach Feedback ───────────────────────────────────────────────────────────
@@ -1041,13 +1045,16 @@ Return EXACTLY this JSON:
 }`;
 
   const response = await getClient().chat.completions.create({
-    model: env.OPENAI_MODEL,
+    model: 'gpt-4o-mini',
     messages: [{ role: 'system', content: CELPIP_SYSTEM }, { role: 'user', content: prompt }],
     temperature: 0.15,
     response_format: { type: 'json_object' },
+    max_tokens: 3000,
   });
 
-  return JSON.parse(response.choices[0].message.content || '{}') as SectionFeedback;
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error('OpenAI returned empty response for section evaluation');
+  return JSON.parse(content) as SectionFeedback;
 }
 
 // ─── Whisper Transcription ────────────────────────────────────────────────────
